@@ -1,52 +1,38 @@
+# gl.py
 import struct
-from collections import namedtuple
+from camera import Camera # type: ignore
+from math import tan, pi
 import numpy as np
-from numpy import sin, cos, tan
+from MatL import ml
+  
 
-STEPS = 1
-pi = 3.1415926535897932384626433
 
-# Definición de vectores
-V2 = namedtuple('Point2', ['x', 'y'])
-V3 = namedtuple('Point3', ['x', 'y', 'z'])
+WHITE = (1, 1, 1)
+BLACK = (0, 0, 0)
+RED = (1, 0, 0)
+GREEN = (0, 1, 0)
+BLUE = (0, 0, 1)
 
-# Funciones para guardar colores e información BMP
-def char(c):
-    return struct.pack('=c', c.encode('ascii'))
-
-def word(w):
-    return struct.pack('=h', w)
-
-def dword(d):
-    return struct.pack('=l', d)
-
+# Utilidades para escribir archivos binarios
+def char(c): return struct.pack("=c", c.encode("ascii"))
+def word(w): return struct.pack("=h", w)
+def dword(d): return struct.pack("=l", d)
 def _color(r, g, b):
-    return bytes([ int(b * 255), int(g * 255), int(r * 255)])
+    return (int(r * 255), int(g * 255), int(b * 255))
 
-# Coordenadas baricéntricas
-def baryCoords(A, B, C, P):
-    try:
-        u = (((B.y - C.y) * (P.x - C.x) + (C.x - B.x) * (P.y - C.y)) /
-             ((B.y - C.y) * (A.x - C.x) + (C.x - B.x) * (A.y - C.y)))
-        v = (((C.y - A.y) * (P.x - C.x) + (A.x - C.x) * (P.y - C.y)) /
-             ((B.y - C.y) * (A.x - C.x) + (C.x - B.x) * (A.y - C.y)))
-        w = 1 - u - v
-    except:
-        return -1, -1, -1
-    return u, v, w
+class Snowman(object):
+    def add_eyes(self, rtx):
+        rtx.scene.append(np.where(V3(-0.05, 0.31, -2), 0.025, self.sclera))
+        rtx.scene.append(np.where(V3(0.05, 0.31, -2), 0.025, self.sclera))
 
-BLACK = _color(0, 0, 0)
-WHITE = _color(1, 1, 1)
 
 class Raytracer(object):
-    def __init__(self, width, height):
-        self.curr_color = WHITE
-        self.clear_color = BLACK
-        self.glCreateWindow(width, height)
-        self.camPosition = V3(0, 0, 0)
-        self.fov = 60
-        self.background = None
-        self.scene = []
+    def __init__(self, width, height, screen):
+        self.width = width
+        self.height = height
+        self.screen = screen
+        self.scene = []  # Asegúrate de inicializar la escena
+        self.frameBuffer = [[BLACK for _ in range(height)] for _ in range(width)]  # Inicializa el frameBuffer
 
     def glFinish(self, filename):
         with open(filename, "wb") as file:
@@ -73,78 +59,117 @@ class Raytracer(object):
             # Color Table
             for y in range(self.height):
                 for x in range(self.width):
-                    file.write(self.pixels[x][y])
+                    color = self.frameBuffer[x][y]
+                    file.write(bytes([color[2], color[1], color[0]]))  # Guarda los colores en formato BGR
 
-    def glCreateWindow(self, width, height):
-        self.width = width
-        self.height = height
-        self.glClear()
-        self.glViewport(0, 0, width, height)
+    def render(self):
+        # Lógica para renderizar la escena
+        self.glGenerateFrameBuffer('output.bmp')  # Genera el archivo BMP
 
-    def glViewport(self, x, y, width, height):
-        self.vpX = int(x)
-        self.vpY = int(y)
-        self.vpWidth = int(width)
-        self.vpHeight = int(height)
 
-    def glClearColor(self, r, g, b):
-        self.clear_color = _color(r, g, b)
-
-    def glClear(self):
-        self.pixels = [[self.clear_color for y in range(self.height)]
-                       for x in range(self.width)]
-
-    def glClearBackground(self):
-        if self.background:
-            for x in range(self.vpX, self.vpX + self.vpWidth):
-                for y in range(self.vpY, self.vpY + self.vpHeight):
-                    tx = (x - self.vpX) / self.vpWidth
-                    ty = (y - self.vpY) / self.vpHeight
-                    self.glPoint(x, y, self.background.getColor(tx, ty))
-
-    def glViewportClear(self, color=None):
-        for x in range(self.vpX, self.vpX + self.vpWidth):
-            for y in range(self.vpY, self.vpY + self.vpHeight):
-                self.glPoint(x, y, color)
-
-    def glColor(self, r, g, b):
-        self.curr_color = _color(r, g, b)
-
-    def glPoint(self, x, y, color=None):
-        if x < self.vpX or x >= self.vpX + self.vpWidth or y < self.vpY or y >= self.vpY + self.vpHeight:
-            return
-        if 0 <= x < self.width and 0 <= y < self.height:
-            self.pixels[int(x)][int(y)] = color or self.curr_color
 
     def glRender(self):
-        for y in range(0, self.height, STEPS):
-            for x in range(0, self.width, STEPS):
-                Px = 2 * ((x + 0.5) / self.width) - 1
-                Py = 2 * ((y + 0.5) / self.height) - 1
+        # Aquí implementas el renderizado de la escena
+        pass
 
-                t = tan((self.fov * pi / 180) / 2)
-                r = t * self.width / self.height
+class V3:
+    def __init__(self, x, y, z):
+        self.x = x
+        self.y = y
+        self.z = z
 
-                Px *= r
-                Py *= t
+    def __repr__(self):
+        return f"V3({self.x}, {self.y}, {self.z})"
 
-                direction = V3(Px, Py, -1)
-                direction = direction / np.linalg.norm(direction)
 
-                self.glPoint(x, y, self.cast_ray(self.camPosition, direction))
 
-    def cast_ray(self, orig, dir):
-        material = self.scene_intersect(orig, dir)
-        return material.diffuse if material else self.clear_color
+class RendererRT:
+    def __init__(self, screen):
+        self.screen = screen
+        _, _, self.width, self.height = screen.get_rect()
+        
+        self.camera = Camera()
+        self.glViewport(0, 0, self.width, self.height)
+        self.glProjection()
+        
+        self.glColor(1, 1, 1)
+        self.glClearColor(0, 0, 0)
+        self.glClear()
+        self.scene = []
+    
 
-    def scene_intersect(self, orig, dir):
-        depth = float('inf')
-        material = None
+    # Definir el viewport
+    def glViewport(self, x, y, width, height):
+        self.vpX, self.vpY = int(x), int(y)
+        self.vpWidth, self.vpHeight = width, height
 
+    # Proyección perspectiva
+    def glProjection(self, n=0.1, f=1000, fov=60):
+        self.nearPlane, self.farPlane = n, f
+        self.fov = fov * pi / 180
+        aspectRatio = self.vpWidth / self.vpHeight
+        
+        self.topEdge = tan(self.fov / 2) * self.nearPlane
+        self.rightEdge = self.topEdge * aspectRatio
+
+    # Colores
+    def glColor(self, r, g, b):
+        self.currColor = [min(1, max(0, v)) for v in (r, g, b)]
+
+    def glClearColor(self, r, g, b):
+        self.clearColor = [min(1, max(0, v)) for v in (r, g, b)]
+
+    def glClear(self):
+        # Llenar la pantalla con el color de fondo
+        color = [int(i * 255) for i in self.clearColor]
+        self.screen.fill(color)
+        self.frameBuffer = [[self.clearColor[:] for _ in range(self.height)]
+                            for _ in range(self.width)]
+
+    # Dibuja un punto en la pantalla
+    def glPoint(self, x, y, color=None):
+        x, y = round(x), round(y)
+        if 0 <= x < self.width and 0 <= y < self.height:
+            color = [int(i * 255) for i in (color or self.currColor)]
+            self.screen.set_at((x, self.height - 1 - y), color)
+            self.frameBuffer[x][y] = color
+
+    # Generar archivo BMP
+    def glGenerateFrameBuffer(self, filename):
+        with open(filename, "wb") as file:
+            file.write(char("B") + char("M"))
+            file_size = 14 + 40 + (self.width * self.height * 3)
+            file.write(dword(file_size) + dword(0) + dword(14 + 40))
+            file.write(dword(40) + dword(self.width) + dword(self.height))
+            file.write(word(1) + word(24) + dword(0))
+            file.write(dword(self.width * self.height * 3) + dword(0) * 4)
+            
+            for y in range(self.height):
+                for x in range(self.width):
+                    color = self.frameBuffer[x][y]
+                    file.write(bytes([color[2], color[1], color[0]]))
+
+    # Método para lanzar rayos
+    def glCastRay(self, orig, direction):
         for obj in self.scene:
-            intersect = obj.ray_intersect(orig, dir)
-            if intersect and intersect.distance < depth:
-                depth = intersect.distance
-                material = obj.material
+            if obj.ray_intersect(orig, direction):
+                return True
+        return False
 
-        return material
+    # Renderizado de la escena
+    def glRender(self):
+        for x in range(self.vpX, self.vpX + self.vpWidth):
+            for y in range(self.vpY, self.vpY + self.vpHeight):
+                pX = ((x + 0.5 - self.vpX) / self.vpWidth) * 2 - 1
+                pY = ((y + 0.5 - self.vpY) / self.vpHeight) * 2 - 1
+
+                pX *= self.rightEdge
+                pY *= self.topEdge
+
+                direction = [pX, pY, -self.nearPlane]
+                direction = ml.norm(V3(*direction))  # Usa tu función de normalización
+
+                if self.glCastRay(self.camera.translate, direction):
+                    self.glPoint(x, y)
+
+        
